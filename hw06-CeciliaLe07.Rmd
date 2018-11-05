@@ -1,0 +1,256 @@
+---
+title: 'Homework 06: Data wrangling wrap up'
+author: "Cecilia Leon"
+output:
+  github_document:
+      toc: yes 
+always_allow_html: yes
+---
+
+## 4. Work with the `singer` data
+
+The `singer_location` dataframe in the `singer` package contains geographical information stored in two different formats: 1. as a (dirty!) variable named `city`; 2. as a latitude / longitude pair (stored in `latitude`, `longitude` respectively). The function `revgeocode` from the `ggmap` library allows you to retrieve some information for a pair (vector) of longitude, latitude (warning: notice the order in which you need to pass lat and long). Read its manual page.
+
+```{r call packages, warning = FALSE}
+suppressPackageStartupMessages(library(singer))
+suppressPackageStartupMessages(library(ggmap))
+suppressPackageStartupMessages(library(readr))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(stringr))
+suppressPackageStartupMessages(library(ggplot2))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First, we are going to familiarize with the structure and data contained in `singer_locations`dataframe:
+
+```{r exploring singer_locations}
+dim(singer_locations)
+summary(singer_locations)
+
+str(singer_locations$latitude)
+str(singer_locations$longitude)
+
+#This line has the purpose to check if observations of NA in longitude and latitude matches.
+sum(is.na(singer_locations$latitude)&is.na(singer_locations$longitude))
+```
+
+We can observe this dataframe is comprised by 10,100 observations *(rows)* and 14 variables *(columns)*, among which are **city**, **latitude** and **longitude**. Furthermore we could appreciate that these last two variables have are of type numeric and have 5968 *NA* in the same 5968 obsercations. 
+
+1. Use `purrr` to map latitude and longitude into human readable information on the band's origin places. Notice that `revgeocode(... , output = "more")` outputs a dataframe, while `revgeocode(... , output = "address")` returns a string: you have the option of dealing with nested dataframes.  
+You will need to pay attention to two things:  
+    *  Not all of the track have a latitude and longitude: what can we do with the missing information? (_filtering_, ...)
+    *  Not all of the time we make a research through `revgeocode()` we get a result. What can we do to avoid those errors to bite us? (look at _possibly()_ in `purrr`...)
+
+
+2. Try to check wether the place in `city` corresponds to the information you retrieved.
+
+3. If you still have time, you can go visual: give a look to the library [`leaflet`](https://rstudio.github.io/leaflet) and plot some information about the bands. A snippet of code is provided below.  
+
+```
+singer_locations %>%  
+  leaflet()  %>%   
+  addTiles() %>%  
+  addCircles(popup = ~artist_name)
+```
+## 3. Work with the candy data
+
+In 2015, we explored a dataset based on a [Halloween candy survey](https://github.com/jennybc/candy) (but it included many other odd and interesting questions). Work on something from [this homework from 2015](references/2015_hw.md). It is good practice on basic
+data ingest, exploration, character data cleanup, and wrangling.
+
+### Your mission
+Bring the Candy Survey data – or part of it – to a ready-to-analyze state and complete some exploratory / analytical task.
+
+Some example tasks:
+
+Easy: Examining how joy/despair scores change with age
+
+Medium: Comparing the joy/despair values of different types of candy (Chocolate vs. “true candy” like Nerds/Starburst)
+
+Medium: Looking for predictors of candy preference (i.e. in the non-candy fields, or perhaps looking at correlations between candy preferences).
+
+Hard: Looking for ‘structure’ in the data. For example, are there classes of individuals with similar candy preference profiles?
+
+#### Sections of the Assignment
+Examining the raw data and choosing a task
+Familiarize yourself with the raw data if you haven’t already. Based on the information available, formulate a task you want to complete and explain what it is. Make it fairly specific, like the tasks above.
+
+```{r exploring candy survey data}
+#Read the data
+data <- read_csv("CANDY-HIERARCHY-2015 SURVEY-Responses.csv",
+                col_types = cols(
+                  Timestamp = col_datetime("%m/%d/%Y %H:%M:%S")
+                ))
+data
+
+#Exploring dataframe
+dim(data)
+head(names(data),n=10)
+summary(data[2:6])
+str(data[2:6])
+```
+
+We can observe this data frame has 5,658 observations *(rows)* and 124 variables *(columns)*. The type of data is character, even the age is has character format.
+
+#### Wrangling
+Based on the task you chose, get the data in a workable format. This will likely involve all kinds of fun dropping columns, using regex to clean text and headers, some tidyr for gathering, etc. Divide each step by a unique heading in your document. By the end, you will likely want things in tidy data format so you can easily use dplyr/ggplot for your analysis/exploration.
+
+We are going to start by cleaning the data about age
+
+```{r clean age}
+clean_age_tmp <- data %>%
+                  mutate(id = sprintf("ID%04d", row_number())) %>%
+                  select(id,
+                         age = starts_with("How"),
+                         everything())
+
+clean_age_data <- clean_age_tmp %>%
+                      mutate(age_nchar = str_length(age) , 
+                             age_num = as.numeric(ifelse(age_nchar > 2, NA, age))) %>% 
+                      filter(is.na(age_num)==FALSE) %>% 
+                      select(id,
+                             age_num,
+                             everything()) 
+
+clean_age_data %>% 
+  ggplot(aes(age_num)) +
+  geom_line(aes(y = ..density..),colour = "#061A40", stat = 'density') +  
+  geom_histogram(aes(y = ..density..), alpha = 0.55, fill="#061A40") +
+  ggtitle("Age distribution of surveyed people") +
+  xlab("Age") 
+```
+
+It is possible to know the distribution of the age of people that answered the survey. The most of people has between 25 and 30 years roughly, while there are some observations for people with ages greater than 75. 
+
+
+Now, let's see and example of the analysis of association between age the opinio about a candy for an specific candy.
+```{r substracting candy}
+candy_tmp <- clean_age_data[,c(2,which(str_detect(names(clean_age_data),"^\\[")==TRUE))]
+
+#[Butterfinger]
+butter_finger <- candy_tmp[,c(1,2)]
+
+data.frame(table(butter_finger)) %>% 
+  rename(Opinion = X.Butterfinger.) %>% 
+  ggplot(aes(Freq,age_num,colour=Opinion)) +
+  geom_point(alpha=0.75) +
+  ggtitle("Opinion of Butterfinger by age") +
+  ylab("Age") +
+  xlab("Opinion") +
+  scale_y_discrete(breaks = seq(5,80,5))
+```
+
+The last graph shows that most of people between 25 and 50 years enjoy this candy instead of despair it.
+
+
+#### Exploring/Analyzing
+Now that your data us ready to analyze, complete the task you set out to complete! This will also be multipart, so again divide things up logically. Perhaps you will start with some basic exploration + tables to get a sense of the data, and then move onto dplyr and plotting.
+
+We can group ththe cadies by the some flavores that are indicated in its name by useing regular expressions:
+
+```{r function}
+#Substracting the characters '[' and ']' of the name of candies
+new_names <- str_replace(
+  str_replace(names(candy_tmp),pattern = "\\[",replacement = ""),
+  pattern = "\\]", replacement = "")
+
+#Changing the names of variables
+candy_tmp <- candy_tmp %>% 
+  `names<-`((new_names))
+
+#Creating a function to count the preference by flavour
+count_by_flavor <- function(vector){
+  
+  #Consider the candies that include mint, peanut or chocolate in its name
+  mint <- str_subset(names(vector), pattern = "[M|m]int")
+  peanut <- str_subset(names(vector), pattern = "[P|p]eanut")
+  chocolate <- str_subset(names(vector), pattern = "[C|c]hoco.")
+
+  #Count the number of joy and despair by each flavour
+  table_mint <- table(unlist(vector[which(names(vector)%in%mint)]))
+  mint_joy <- ifelse(is.na(table_mint['JOY']),0,table_mint['JOY'])
+  mint_despair <- ifelse(is.na(table_mint['DESPAIR']),0,table_mint['DESPAIR'])
+  
+  table_peanut <- table(unlist(vector[which(names(vector)%in%peanut)]))
+  peanut_joy <- ifelse(is.na(table_peanut['JOY']),0,table_peanut['JOY'])
+  peanut_dispair <- ifelse(is.na(table_peanut['DESPAIR']),0,table_peanut['DESPAIR'])
+
+  table_chocolate <- table(unlist(vector[which(names(vector)%in%chocolate)]))
+  chocolate_joy <- ifelse(is.na(table_chocolate['JOY']),0,table_chocolate['JOY'])
+  chocolate_dispair <- ifelse(is.na(table_chocolate['DESPAIR']),0,table_chocolate['DESPAIR'])
+  
+  #Result will be a list
+  list(mint = unname(mint_joy - mint_despair),
+       peanut = unname(peanut_joy - peanut_dispair),
+       chocolate = unname(chocolate_joy - chocolate_dispair),
+       age = as.numeric(vector[1]))
+}
+```
+
+Now, we can use the functions `apply` function to sample the opinion by age about the flavours that we defined prevously applying the function `count_by_flavor`
+
+```{r apply function, warning = FALSE}
+#declaring a list
+flavor_sample <- list()
+
+#Taking a sample by age and calculating the preference by flavour
+n <- 350
+set.seed(548)
+flavor_sample <- apply(candy_tmp[sample(1:dim(candy_tmp),n,replace = FALSE),],1,count_by_flavor)
+
+#Show the result
+flavor_sample[1:5]
+```
+
+As we obtained a `list`as a result, we can take advantage of the library `purrr` to show the this result on the following graph:
+
+```{r using purrr}
+#Counting the opinion abput mint flavor
+library(purrr)
+count_mint <- cbind(unlist(map(flavor_sample,function(x)x['age'])),
+                    unlist(map(flavor_sample,function(x)x['mint'])))
+
+count_peanut <- cbind(unlist(map(flavor_sample,function(x)x['age'])),
+                    unlist(map(flavor_sample,function(x)x['peanut'])))
+
+count_chocolate <- cbind(unlist(map(flavor_sample,function(x)x['age'])),
+                    unlist(map(flavor_sample,function(x)x['chocolate'])))
+
+```
+
+```{r}
+result_mint <- tibble(age = names(tapply(count_mint[,2],count_mint[,1],mean)),
+                      opinion = tapply(count_mint[,2],count_mint[,1],mean))
+
+
+result_mint %>% 
+  mutate(age = sort(age)) %>% 
+  ggplot(aes(opinion,age)) +
+  geom_point() +
+  geom_vline(xintercept = 0)
+
+```
+
+```{r}
+result_peanut <- tibble(age = names(tapply(count_peanut[,2],count_peanut[,1],mean)),
+                      opinion = tapply(count_peanut[,2],count_peanut[,1],mean))
+
+result_peanut %>% 
+  mutate(age = sort(age)) %>% 
+  ggplot(aes(opinion,age)) +
+  geom_point() +
+  geom_vline(xintercept = 0)
+```
+
+
+```{r}
+result_chocolate <- tibble(age = names(tapply(count_chocolate[,2],count_chocolate[,1],mean)),
+                      opinion = tapply(count_chocolate[,2],count_chocolate[,1],mean))
+
+result_chocolate %>% 
+  mutate(age = sort(age)) %>% 
+  ggplot(aes(opinion,age)) +
+  geom_point() +
+  geom_vline(xintercept = 0)
+
+```
