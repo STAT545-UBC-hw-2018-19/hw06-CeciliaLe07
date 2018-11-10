@@ -19,6 +19,9 @@ suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(stringr))
 suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(leaflet))
+suppressPackageStartupMessages(library(kableExtra))
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -31,19 +34,80 @@ summary(singer_locations)
 str(singer_locations$latitude)
 str(singer_locations$longitude)
 
-#This line has the purpose to check if observations of NA in longitude and latitude matches.
+#This line has the purpose to check if observations of NA in longitude and 
+#latitude matches
 sum(is.na(singer_locations$latitude)&is.na(singer_locations$longitude))
 ```
 
-We can observe this dataframe is comprised by 10,100 observations *(rows)* and 14 variables *(columns)*, among which are **city**, **latitude** and **longitude**. Furthermore we could appreciate that these last two variables have are of type numeric and have 5968 *NA* in the same 5968 obsercations. 
+We can observe this dataframe is comprised by 10,100 observations *(rows)* and 14 variables *(columns)*, among which are **city**, **latitude** and **longitude**. Furthermore we could appreciate that these last two variables are of type numeric and have 5968 *NA* in the same 5968 observations. 
 
 1. Use `purrr` to map latitude and longitude into human readable information on the band's origin places. Notice that `revgeocode(... , output = "more")` outputs a dataframe, while `revgeocode(... , output = "address")` returns a string: you have the option of dealing with nested dataframes.  
 You will need to pay attention to two things:  
     *  Not all of the track have a latitude and longitude: what can we do with the missing information? (_filtering_, ...)
     *  Not all of the time we make a research through `revgeocode()` we get a result. What can we do to avoid those errors to bite us? (look at _possibly()_ in `purrr`...)
 
+First, in order to keep only observations that has information about both latitude and longitude, we can filter the dataframe:
+
+```{r singer_flitering}
+singer_locations_flitered <- singer_locations %>% 
+                              filter(!is.na(longitude) & !is.na(latitude))
+```
+
+Now, we can obtain the *human readable* corresponding addresses. 
+**Note:** In order to have access to the API provided by google was necessary to generate a key in this [link](http://code.google.com/apis/maps/documentation/geocoding/) and then register the generated key by command `register_google()`.
+
+Furthermore, as there are many records (4,132), I ran this chunk and save the information in a external csv file in order to avoid re-run again when render the md file and instead of that just import the file **readable_address.csv**. This was possible since I set the *output parameter* of `revgeocode()` to `address`, so I just produced one address by row.
+
+```{r revgeocode}
+#This code was commented in order to show it without run it.
+
+#readable_adress <- map2(singer_locations_flitered$longitude,
+#                           singer_locations_flitered$latitude,c) %>% 
+#                     map(
+#                      possibly(revgeocode,"address",
+#                                "Not found")
+#                      ) %>%  
+#                    unlist()
+
+#write.csv(data.frame(singer_locations_flitered,readable_adress),"readable_address.csv")
+```
 
 2. Try to check wether the place in `city` corresponds to the information you retrieved.
+
+To chek is the place in **city** corresponds with the information provided by API, I built the following function called `coincidence_city`
+
+```{r function coincidence_city}
+#In order to use this functions the inputs are:
+
+#x is the list of addresses provided by google API
+#y is the list of provided cities by singer_locations dataframe
+
+coincidence_city <- function(x,y){
+  my_pattern <- str_c(str_replace_all(unlist(str_split(y, "[\\-|?,;+]+"))," ",""),
+                      collapse = "|")
+  length(str_subset(x, pattern = my_pattern))
+  }
+```
+
+Then, we can run that function using the command `map2`
+
+```{r city_matches}
+#Now, we can just import the generated csv file:
+singer_locations_csv <- read.csv("readable_address.csv", header = TRUE, sep =",")
+attach(singer_locations_csv)
+result <- map2_dbl(readable_adress,city, coincidence_city)
+paste("Percentage of coincidence:",round((sum(result)/length(result))*100,2),"%")
+```
+
+As we can see, using our function to compare addresses and cities, the 72.8% of the records has cities that corresponds to the addresses provided by google API. However, it is important to note this function could be improved by adding codification for city given by the API. For example, in record 4 cities don't match because **Pennsylvania** is codified as **PA**, so the name doesn't match.
+
+```{r}
+#Adress provided by API
+readable_adress[4]
+
+#City on dataframe
+city[4]
+```
 
 3. If you still have time, you can go visual: give a look to the library [`leaflet`](https://rstudio.github.io/leaflet) and plot some information about the bands. A snippet of code is provided below.  
 
@@ -53,6 +117,17 @@ singer_locations %>%
   addTiles() %>%  
   addCircles(popup = ~artist_name)
 ```
+
+```{r}
+singer_locations_csv %>%  
+  leaflet()  %>%   
+  addTiles() %>%  
+  addCircles(popup = ~artist_name)
+```
+
+![leaflet_plot.png](leaflet_plot.png)
+
+
 ## 3. Work with the candy data
 
 In 2015, we explored a dataset based on a [Halloween candy survey](https://github.com/jennybc/candy) (but it included many other odd and interesting questions). Work on something from [this homework from 2015](references/2015_hw.md). It is good practice on basic
@@ -81,7 +156,8 @@ data <- read_csv("CANDY-HIERARCHY-2015 SURVEY-Responses.csv",
                 col_types = cols(
                   Timestamp = col_datetime("%m/%d/%Y %H:%M:%S")
                 ))
-data
+
+data[1:6,1:8] %>% kable()
 
 #Exploring dataframe
 dim(data)
@@ -97,7 +173,7 @@ Based on the task you chose, get the data in a workable format. This will likely
 
 We are going to start by cleaning the data about age
 
-```{r clean age}
+```{r clean age, warning = FALSE}
 clean_age_tmp <- data %>%
                   mutate(id = sprintf("ID%04d", row_number())) %>%
                   select(id,
@@ -127,7 +203,7 @@ Now, let's see and example of the analysis of association between age the opinio
 ```{r substracting candy}
 candy_tmp <- clean_age_data[,c(2,which(str_detect(names(clean_age_data),"^\\[")==TRUE))]
 
-#[Butterfinger]
+#Butterfinger
 butter_finger <- candy_tmp[,c(1,2)]
 
 data.frame(table(butter_finger)) %>% 
@@ -146,9 +222,9 @@ The last graph shows that most of people between 25 and 50 years enjoy this cand
 #### Exploring/Analyzing
 Now that your data us ready to analyze, complete the task you set out to complete! This will also be multipart, so again divide things up logically. Perhaps you will start with some basic exploration + tables to get a sense of the data, and then move onto dplyr and plotting.
 
-We can group ththe cadies by the some flavores that are indicated in its name by useing regular expressions:
+We can group ththe cadies by the some flavores that are indicated in its name by using regular expressions:
 
-```{r function}
+```{r function count_by_flavor}
 #Substracting the characters '[' and ']' of the name of candies
 new_names <- str_replace(
   str_replace(names(candy_tmp),pattern = "\\[",replacement = ""),
@@ -199,14 +275,14 @@ set.seed(548)
 flavor_sample <- apply(candy_tmp[sample(1:dim(candy_tmp),n,replace = FALSE),],1,count_by_flavor)
 
 #Show the result
-flavor_sample[1:5]
+flavor_sample[1:3]
 ```
 
 As we obtained a `list`as a result, we can take advantage of the library `purrr` to show the this result on the following graph:
 
 ```{r using purrr}
 #Counting the opinion abput mint flavor
-library(purrr)
+
 count_mint <- cbind(unlist(map(flavor_sample,function(x)x['age'])),
                     unlist(map(flavor_sample,function(x)x['mint'])))
 
@@ -218,20 +294,23 @@ count_chocolate <- cbind(unlist(map(flavor_sample,function(x)x['age'])),
 
 ```
 
-```{r}
+```{r mint_opinion}
 result_mint <- tibble(age = names(tapply(count_mint[,2],count_mint[,1],mean)),
                       opinion = tapply(count_mint[,2],count_mint[,1],mean))
-
 
 result_mint %>% 
   mutate(age = sort(age)) %>% 
   ggplot(aes(opinion,age)) +
   geom_point() +
-  geom_vline(xintercept = 0)
-
+  geom_vline(xintercept = 0) +
+  ggtitle("Opinion of flavor mint by age in the sample") +
+  xlab("Opinion (joy-despair)") +
+  ylab("Age")
 ```
 
-```{r}
+There is not a clear pattern between the age and the opinion about mint falvor, however it is possible to observe the most of people tends to feel despair instead of joy since the most of the counts of opinion are negative values.
+
+```{r peanut_opinion}
 result_peanut <- tibble(age = names(tapply(count_peanut[,2],count_peanut[,1],mean)),
                       opinion = tapply(count_peanut[,2],count_peanut[,1],mean))
 
@@ -239,11 +318,15 @@ result_peanut %>%
   mutate(age = sort(age)) %>% 
   ggplot(aes(opinion,age)) +
   geom_point() +
-  geom_vline(xintercept = 0)
+  geom_vline(xintercept = 0) +
+  ggtitle("Opinion of flavor peanut by age in the sample") +
+  xlab("Opinion (joy-despair)") +
+  ylab("Age")
 ```
 
+Although most of people feel joy about this flavor, the uounger people feels despair about it.
 
-```{r}
+```{r chocolate_opinion}
 result_chocolate <- tibble(age = names(tapply(count_chocolate[,2],count_chocolate[,1],mean)),
                       opinion = tapply(count_chocolate[,2],count_chocolate[,1],mean))
 
@@ -251,6 +334,10 @@ result_chocolate %>%
   mutate(age = sort(age)) %>% 
   ggplot(aes(opinion,age)) +
   geom_point() +
-  geom_vline(xintercept = 0)
-
+  geom_vline(xintercept = 0) +
+  ggtitle("Opinion of flavor chocolate by age in the sample") +
+  xlab("Opinion (joy-despair)") +
+  ylab("Age")
 ```
+
+Most of people feels jpu about chocolate flavor regardless the age.
