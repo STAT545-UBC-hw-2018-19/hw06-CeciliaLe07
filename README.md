@@ -6,8 +6,8 @@ This repository is comprised mainly by the following files:
 |--------|---------|
 |[hw06-CeciliaLe07.Rmd](https://github.com/STAT545-UBC-students/hw06-CeciliaLe07/blob/master/hw06-CeciliaLe07.Rmd) | The RMarkdown document with the solved exercises for this assigment |
 |[hw06-CeciliaLe07.md](https://github.com/STAT545-UBC-students/hw06-CeciliaLe07/blob/master/hw06-CeciliaLe07.md)  | The rendered github RMarkdown document    |
-| [new_gapminder.csv](https://github.com/STAT545-UBC-students/hw06-CeciliaLe07/blob/master/CANDY-HIERARCHY-2015%20SURVEY-Responses.csv) | The data frame with information about candy survey |
-| [new_gapminder.csv](https://github.com/STAT545-UBC-students/hw06-CeciliaLe07/blob/master/readable_address.csv) | A data frame that contains the adresses of singer_location data frame provided by google API |
+| [CANDY-HIERARCHY-2015%20SURVEY-Responses.csv](https://github.com/STAT545-UBC-students/hw06-CeciliaLe07/blob/master/CANDY-HIERARCHY-2015%20SURVEY-Responses.csv) | The data frame with information about candy survey |
+| [readable_address.csv](https://github.com/STAT545-UBC-students/hw06-CeciliaLe07/blob/master/readable_address.csv) | A data frame that contains the adresses of singer_location data frame provided by google API |
 
 Furthermore, these are the main sources I used to get extra help:
 
